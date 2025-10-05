@@ -211,5 +211,5 @@ __marimo__/
 
 # data, models and mlflows 
 data/
-models/
-mlruns/
+artifacts/*.log
+artifacts/processed/
