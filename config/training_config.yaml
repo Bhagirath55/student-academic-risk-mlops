@@ -1,0 +1,48 @@
+artifacts:
+  dir: artifacts
+  processed_dir: artifacts/processed
+  models_dir: artifacts/models
+  metrics_file: artifacts/training_metrics.json
+  log_file: artifacts/logs/training.log
+
+training:
+  smote: true
+  random_state: 42
+
+models:
+  RandomForest:
+    n_estimators: 100
+    max_depth: 9
+    random_state: 42
+    class_weight: balanced
+
+  XGBoost:
+    n_estimators: 30
+    max_depth: 6
+    random_state: 42
+    use_label_encoder: false
+    eval_metric: mlogloss
+
+  ANN:
+    #input_dim: 29
+    layers:
+      - units: 1024
+        activation: relu
+        dropout: 0.2
+      - units: 1024
+        activation: relu
+      - units: 512
+        activation: relu
+      - units: 256
+        activation: relu
+      - units: 128
+        activation: relu
+      - units: 64
+        activation: relu
+    #output_units: 3
+    output_activation: softmax
+    optimizer:
+      type: Adam
+      learning_rate: 0.01
+    loss: sparse_categorical_crossentropy
+    metrics: [accuracy]

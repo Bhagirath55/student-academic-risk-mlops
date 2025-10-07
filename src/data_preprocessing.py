@@ -12,7 +12,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
 # --------------------  Loading Config -------------------- #
-with open("config/config.yaml", "r") as file:
+with open("config/preprocessing_config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
 raw_data_path = config["paths"]["raw_data"]
@@ -94,12 +94,10 @@ X_test_processed = preprocessor.transform(X_test)
 logging.info("Transformed train and test data")
 
 # -------------------- Saving Processed Files -------------------- #
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-np.save(f"{processed_dir}/X_train_{timestamp}.npy", X_train_processed)
-np.save(f"{processed_dir}/X_test_{timestamp}.npy", X_test_processed)
-np.save(f"{processed_dir}/y_train_{timestamp}.npy", y_train)
-np.save(f"{processed_dir}/y_test_{timestamp}.npy", y_test)
+np.save(f"{processed_dir}/X_train.npy", X_train_processed)
+np.save(f"{processed_dir}/X_test.npy", X_test_processed)
+np.save(f"{processed_dir}/y_train.npy", y_train)
+np.save(f"{processed_dir}/y_test.npy", y_test)
 
 # Saving preprocessor
 joblib.dump(preprocessor, preprocessor_file)
@@ -111,7 +109,7 @@ encoded_columns = list(
     .named_steps['onehot']
     .get_feature_names_out(categorical_cols)
 )
-joblib.dump(encoded_columns, f"{processed_dir}/encoded_columns_{timestamp}.pkl")
+joblib.dump(encoded_columns, f"{processed_dir}/encoded_columns.pkl")
 
 logging.info(" Data preprocessing completed successfully")
 print("Data preprocessing completed successfully ")
