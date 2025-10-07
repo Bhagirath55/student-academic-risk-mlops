@@ -213,3 +213,4 @@ __marimo__/
 data/
 artifacts/*.log
 artifacts/processed/
+mlruns/
