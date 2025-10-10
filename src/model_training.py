@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 from datetime import datetime
@@ -109,6 +110,15 @@ def eval_and_log(model, X_test, y_test):
     }
     return metrics
 
+# -------------------- Model Versioning -------------------- #
+def get_next_model_version(model_dir, base_name="best_model"):
+    os.makedirs(model_dir, exist_ok=True)
+    existing = [f for f in os.listdir(model_dir) if re.match(rf"{base_name}_v\d+\.pkl", f)]
+    if not existing:
+        return 1
+    versions = [int(re.search(r"v(\d+)", f).group(1)) for f in existing]
+    return max(versions) + 1
+
 # -------------------- Main -------------------- #
 def main():
     logger.info("Starting training pipeline")
@@ -131,12 +141,11 @@ def main():
         "RandomForest": RandomForestClassifier(
             **config['models']['RandomForest'],
             verbose=2,
-            
         ),
         "XGBoost": XGBClassifier(
             **config['models']['XGBoost'],
             verbose=2,
-            scale_pos_weight=np.bincount(y_train)[0] / np.bincount(y_train)[1]  # handle imbalance
+            scale_pos_weight=np.bincount(y_train)[0] / np.bincount(y_train)[1]
         ),
         "ANN": KerasClassifier(
             model=build_ann_from_config,
@@ -184,27 +193,30 @@ def main():
             mlflow.log_metric(f"{name}_cv_accuracy", float(score))
             mlflow.log_metric(f"{name}_test_accuracy", float(test_metrics['accuracy']))
 
-    # -------------------- Saving Best Model -------------------- #
+    # -------------------- Saving Best Model with Version -------------------- #
     if best_model:
-        #timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_path = os.path.join(MODELS_DIR, f"best_model.pkl")
+        version = get_next_model_version(MODELS_DIR)
+        versioned_model_path = os.path.join(MODELS_DIR, f"best_model_v{version}.pkl")
+        latest_model_path = os.path.join(MODELS_DIR, "best_model.pkl")
 
         if preprocessor:
             final_pipeline = Pipeline([('preprocessor', preprocessor), ('classifier', best_model)])
-            joblib.dump(final_pipeline, model_path)
+            joblib.dump(final_pipeline, versioned_model_path)
+            joblib.dump(final_pipeline, latest_model_path)
         else:
-            joblib.dump(best_model, model_path)
+            joblib.dump(best_model, versioned_model_path)
+            joblib.dump(best_model, latest_model_path)
 
         with open(METRICS_JSON, "w") as f:
             json.dump(all_results, f, indent=4)
 
         if MLFLOW_AVAILABLE:
-            mlflow.log_artifact(model_path)
+            mlflow.log_artifact(versioned_model_path)
             mlflow.log_artifact(METRICS_JSON)
             mlflow.end_run()
 
-        logger.info(f"Best model saved: {best_name} with accuracy {best_score:.4f}")
-        print(f"✅ Best model: {best_name}, Accuracy: {best_score:.4f}")
+        logger.info(f"Best model saved: {best_name} with accuracy {best_score:.4f} (version {version})")
+        print(f"✅ Best model: {best_name}, Accuracy: {best_score:.4f}, Version: {version}")
 
 if __name__ == "__main__":
     try:
