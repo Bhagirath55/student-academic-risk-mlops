@@ -7,6 +7,9 @@ on:
     paths:
       - 'data/new_data/new_student_data.csv'
 
+permissions:
+  contents: write
+
 jobs:
   retrain:
     runs-on: ubuntu-latest
