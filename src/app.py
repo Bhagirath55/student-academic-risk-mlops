@@ -50,7 +50,7 @@ class InputData(BaseModel):
 def predict(input_data: InputData):
     try:
         df = pd.DataFrame(input_data.data)  # each dict becomes a row
-        prediction = model_pipeline.predict(df)
+        prediction = model_pipeline.predict(df)[0]
         return {"predicted_risk_level": int(prediction[0])}
     except Exception as e:
         return {"error": str(e)}
