@@ -1,13 +1,19 @@
 import streamlit as st
 from utils import predict_risk
 from components.input_fields import get_input_features
+import os
 from components.page_layout import set_page_layout
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.app import latest_model
+
 
 # -------------------- Layout -------------------- #
 set_page_layout()
 
 st.title("🎓 Student Academic Risk Predictor")
 st.markdown("Use the sidebar to input student details and predict their academic risk level.")
+st.sidebar.success(f"Loaded model: {latest_model}")
 
 # -------------------- Sidebar Inputs -------------------- #
 input_features = get_input_features()
