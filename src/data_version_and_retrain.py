@@ -59,13 +59,13 @@ def run_preprocessing_and_training(versioned_csv_path):
 
     # call data_preprocessing.py (same as in your Docker: python src/data_preprocessing.py)
     print("Running preprocessing...")
-    p1 = subprocess.run(["python", "src/data_preprocessing.py"], env=env)
+    p1 = subprocess.run(["python", "src/data_preprocessing.py"], env=env, check=True)
     if p1.returncode != 0:
         raise RuntimeError("data_preprocessing.py failed (see logs)")
 
     # call model_training.py
     print("Running training...")
-    p2 = subprocess.run(["python", "src/model_training.py"], env=env)
+    p2 = subprocess.run(["python", "src/model_training.py"], env=env, check=True)
     if p2.returncode != 0:
         raise RuntimeError("model_training.py failed (see logs)")
 

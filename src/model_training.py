@@ -2,6 +2,7 @@ import os
 import re
 import json
 import logging
+import subprocess
 from datetime import datetime
 import yaml
 import numpy as np
@@ -14,13 +15,8 @@ from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 
-# TensorFlow/Keras for ANN
-#import tensorflow as tf
-#from tensorflow.keras.models import Sequential
-#from tensorflow.keras.layers import Dense, Dropout
-#rom tensorflow.keras.optimizers import Adam
-#from scikeras.wrappers import KerasClassifier
-
+# TensorFlow/Keras commented out in your original file (kept commented)
+# ...
 # MLflow support
 try:
     import mlflow
@@ -41,7 +37,6 @@ TRAIN_LOG = config['artifacts']['log_file']
 # Use env variable override if available (set by data_version_and_retrain.py)
 DATA_PATH = os.environ.get("RAW_DATA_PATH_OVERRIDE", config['artifacts']['data_path'])
 
-
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 
@@ -54,18 +49,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ===============================================================
-# 🧩 NEW: Data-change detection and retraining control
+# 🧩 Data-change detection and retraining control
 # ===============================================================
 TIMESTAMP_FILE = os.path.join(MODELS_DIR, "data_timestamp.txt")
 
 def data_changed():
     """Detect if new data arrived by comparing modification timestamps."""
     if not os.path.exists(DATA_PATH):
-        logger.warning("⚠️ Data file not found. Skipping data check.")
+        logger.warning("⚠️ Data file not found for data_changed check: %s", DATA_PATH)
         return False
 
     new_data_time = datetime.fromtimestamp(os.path.getmtime(DATA_PATH))
     if not os.path.exists(TIMESTAMP_FILE):
+        # No timestamp recorded -> consider as changed (first run)
+        logger.info("No timestamp file found, treating data as changed.")
         return True
 
     with open(TIMESTAMP_FILE, "r") as f:
@@ -73,8 +70,11 @@ def data_changed():
 
     try:
         last_time = datetime.fromisoformat(last_time_str)
-        return new_data_time > last_time
+        changed = new_data_time > last_time
+        logger.debug("Data changed? %s (new: %s, last: %s)", changed, new_data_time, last_time)
+        return changed
     except Exception:
+        logger.exception("Failed to parse timestamp file; treating data as changed.")
         return True
 
 def update_data_timestamp():
@@ -98,33 +98,27 @@ def load_processed_data():
 
     if X_train is None or X_test is None or y_train is None or y_test is None:
         logger.error("Processed data missing! Run data_preprocessing.py first.")
-        raise FileNotFoundError("Processed datasets not found.")
+        raise FileNotFoundError("Processed datasets not found. Ensure data_preprocessing.py has run and created X_train.npy etc.")
 
     return X_train, X_test, y_train, y_test
 
-#def build_ann_from_config(cfg, input_dim=None, output_dim=None):
- #   model = Sequential()
-  #  layers = cfg['layers']
+def run_preprocessing(data_path_override=None):
+    """Run data_preprocessing.py optionally passing RAW_DATA_PATH_OVERRIDE env var.
+       Returns True on success, raises on failure."""
+    env = os.environ.copy()
+    if data_path_override:
+        env["RAW_DATA_PATH_OVERRIDE"] = data_path_override
+        logger.info("Running preprocessing with RAW_DATA_PATH_OVERRIDE=%s", data_path_override)
+    else:
+        logger.info("Running preprocessing with default raw data path from config.")
 
-   # model.add(Dense(layers[0]['units'], activation=layers[0]['activation'], input_dim=input_dim))
-    #if 'dropout' in layers[0] and layers[0]['dropout'] > 0:
-     #   model.add(Dropout(layers[0]['dropout']))
-
-    #for layer in layers[1:]:
-     #   model.add(Dense(layer['units'], activation=layer['activation']))
-      #  if 'dropout' in layer and layer['dropout'] > 0:
-       #     model.add(Dropout(layer['dropout']))
-
-  #  model.add(Dense(output_dim, activation=cfg['output_activation']))
-
-   # opt_cfg = cfg['optimizer']
-    #if opt_cfg['type'].lower() == 'adam':
-     #   optimizer = Adam(learning_rate=opt_cfg['learning_rate'])
-    #else:
-     #   optimizer = opt_cfg['type']
-
-    #model.compile(optimizer=optimizer, loss=cfg['loss'], metrics=cfg['metrics'])
-    #return model
+    # Use subprocess.run to catch return code and logs
+    p = subprocess.run(["python", "src/data_preprocessing.py"], env=env)
+    if p.returncode != 0:
+        logger.error("data_preprocessing.py failed with returncode %s", p.returncode)
+        raise RuntimeError("data_preprocessing.py failed (check preprocessing logs).")
+    logger.info("data_preprocessing.py finished successfully")
+    return True
 
 def eval_and_log(model, X_test, y_test):
     y_pred = model.predict(X_test)
@@ -152,15 +146,33 @@ def get_next_model_version(model_dir, base_name="best_model"):
 # -------------------- Main -------------------- #
 def main():
     logger.info("🚀 Starting training pipeline")
+    print("🚀 Starting training pipeline")
 
-    # 🆕 Retraining trigger check
-    if not data_changed():
-        logger.info("✅ No new data detected — Skipping retraining.")
-        print("✅ No new data detected — Skipping retraining.")
-        return
+    # Determine whether to re-run preprocessing:
+    processed_files_present = all(os.path.exists(os.path.join(PROCESSED_DIR, fn)) for fn in ["X_train.npy", "X_test.npy", "y_train.npy", "y_test.npy"])
+    logger.debug("Processed files present: %s", processed_files_present)
+
+    # If data changed OR processed artifacts are missing -> run preprocessing
+    if data_changed() or not processed_files_present:
+        if data_changed():
+            logger.info("📊 New or changed data detected. Will run preprocessing before training.")
+            print("📊 New or changed data detected. Running preprocessing...")
+        else:
+            logger.info("⚠️ Processed artifacts missing. Running preprocessing before training.")
+            print("⚠️ Processed artifacts missing. Running preprocessing...")
+
+        # Run preprocessing; set RAW_DATA_PATH_OVERRIDE so preprocessing reads the right CSV
+        try:
+            run_preprocessing(data_path_override=DATA_PATH)
+        except Exception as e:
+            logger.exception("Preprocessing failed; aborting training.")
+            raise
+
     else:
-        print("📊 New data detected — Retraining started...")
+        logger.info("ℹ️ No data change detected and processed artifacts present. Skipping preprocessing.")
+        print("ℹ️ No data change detected and processed artifacts present. Skipping preprocessing.")
 
+    # Load processed data (X_train.npy etc.)
     X_train, X_test, y_train, y_test = load_processed_data()
 
     # -------------------- Loading preprocessor -------------------- #
@@ -173,8 +185,15 @@ def main():
             X_test = pd.DataFrame(X_test, columns=preprocessor.feature_names_in_)
 
     # -------------------- Candidate Models -------------------- #
-    #input_dim = X_train.shape[1]
-    #output_dim = len(np.unique(y_train))
+    # input_dim = X_train.shape[1]
+    # output_dim = len(np.unique(y_train))
+
+    # handle possible class imbalance safe-guard for bincount
+    try:
+        pos_counts = np.bincount(y_train)
+        scale_pos_weight = float(pos_counts[0] / pos_counts[1]) if len(pos_counts) > 1 and pos_counts[1] > 0 else 1.0
+    except Exception:
+        scale_pos_weight = 1.0
 
     candidates = {
         "RandomForest": RandomForestClassifier(
@@ -184,18 +203,11 @@ def main():
         "XGBoost": XGBClassifier(
             **config['models']['XGBoost'],
             verbose=2,
-            scale_pos_weight=np.bincount(y_train)[0] / np.bincount(y_train)[1]
-        )#,
-        #"ANN": KerasClassifier(
-         #   model=build_ann_from_config,
-          #  model__cfg=config['models']['ANN'],
-           # model__input_dim=input_dim,
-            #model__output_dim=output_dim,
-            #verbose=2
-        #)
+            scale_pos_weight=scale_pos_weight
+        )
     }
 
-    cv = StratifiedKFold(n_splits=2, shuffle=True, random_state=config['training']['random_state'])
+    cv = StratifiedKFold(n_splits=max(2, config['training'].get('cv_splits', 2)), shuffle=True, random_state=config['training']['random_state'])
     best_model, best_score, best_name = None, -1, None
     all_results = {}
 
@@ -256,6 +268,9 @@ def main():
 
         logger.info(f"Best model saved: {best_name} with accuracy {best_score:.4f} (version {version})")
         print(f"✅ Best model: {best_name}, Accuracy: {best_score:.4f}, Version: {version}")
+    else:
+        logger.warning("No best model found - training loop did not produce any model.")
+        print("⚠️ No best model found - nothing saved.")
 
 if __name__ == "__main__":
     try:

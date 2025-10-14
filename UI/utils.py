@@ -1,6 +1,6 @@
 import requests
 
-API_URL = "http://host.docker.internal:8000/predict"
+API_URL = "http://localhost:8000/predict"
 
 def predict_risk(input_features):
     try:
