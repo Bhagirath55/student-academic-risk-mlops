@@ -45,7 +45,7 @@ jobs:
           git rm -f artifacts/models/best_model.pkl || echo "No old best model to remove"
 
           # Add new versioned dataset(s)
-          git add data/preprocessed_data/student_cleaned_data_v*.csv
+          git add data/preprocessed_data/student_cleaned_data.csv
 
           # Add new best model
           git add artifacts/models/best_model_v*.pkl
