@@ -1,0 +1,69 @@
+name: Auto Retrain Models
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'data/new_data/student_cleaned_data.csv'
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2️⃣ Set up Python
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.10
+
+      # 3️⃣ Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4️⃣ Run your existing versioning + retraining script
+      - name: Run data versioning, preprocessing & training
+        run: python src/data_version_and_retrain.py
+
+      # 5️⃣ Commit new versioned dataset & new best model, remove old ones
+      - name: Commit new dataset version & best model
+        run: |
+          git config --global user.name "Bhagirath55"
+          git config --global user.email "21fycs.a20.bhagirath@gmail.com"
+
+          # Remove old dataset from Git (keep locally)
+          git ls-files data/preprocessed_data/student_cleaned_dataset.csv | xargs git rm -f || echo "No old base dataset to remove"
+
+          # Remove old best model
+          git rm -f artifacts/models/best_model.pkl || echo "No old best model to remove"
+
+          # Add new versioned dataset(s)
+          git add data/preprocessed_data/student_cleaned_data_v*.csv
+
+          # Add new best model
+          git add artifacts/models/best_model_v*.pkl
+
+          git commit -m "Added new dataset version & best model after retraining [skip ci]" || echo "No changes to commit"
+          git push origin dev
+
+      # 6️⃣ Upload trained models & logs (optional)
+      - name: Upload trained models
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-models
+          path: artifacts/models/
+
+      - name: Upload logs & metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: preprocessing-and-training-logs
+          path: |
+            artifacts/logs/
+            artifacts/training_metrics.json
