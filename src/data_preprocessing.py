@@ -15,7 +15,8 @@ from sklearn.pipeline import Pipeline
 with open("config/preprocessing_config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
-raw_data_path = config["paths"]["raw_data"]
+raw_data_path = os.getenv("RAW_DATA_PATH_OVERRIDE",config["paths"]["raw_data"])
+print("Using Dataset:", raw_data_path)
 processed_dir = config["paths"]["processed_dir"]
 log_file = config["paths"]["log_file"]
 preprocessor_file = config["paths"]["preprocessor_file"]

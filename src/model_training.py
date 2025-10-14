@@ -15,11 +15,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 
 # TensorFlow/Keras for ANN
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import Adam
-from scikeras.wrappers import KerasClassifier
+#import tensorflow as tf
+#from tensorflow.keras.models import Sequential
+#from tensorflow.keras.layers import Dense, Dropout
+#rom tensorflow.keras.optimizers import Adam
+#from scikeras.wrappers import KerasClassifier
 
 # MLflow support
 try:
@@ -38,6 +38,9 @@ PROCESSED_DIR = config['artifacts']['processed_dir']
 MODELS_DIR = config['artifacts']['models_dir']
 METRICS_JSON = config['artifacts']['metrics_file']
 TRAIN_LOG = config['artifacts']['log_file']
+# Use env variable override if available (set by data_version_and_retrain.py)
+DATA_PATH = os.environ.get("RAW_DATA_PATH_OVERRIDE", config['artifacts']['data_path'])
+
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
@@ -49,6 +52,37 @@ logging.basicConfig(
     format='%(asctime)s:%(levelname)s:%(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ===============================================================
+# 🧩 NEW: Data-change detection and retraining control
+# ===============================================================
+TIMESTAMP_FILE = os.path.join(MODELS_DIR, "data_timestamp.txt")
+
+def data_changed():
+    """Detect if new data arrived by comparing modification timestamps."""
+    if not os.path.exists(DATA_PATH):
+        logger.warning("⚠️ Data file not found. Skipping data check.")
+        return False
+
+    new_data_time = datetime.fromtimestamp(os.path.getmtime(DATA_PATH))
+    if not os.path.exists(TIMESTAMP_FILE):
+        return True
+
+    with open(TIMESTAMP_FILE, "r") as f:
+        last_time_str = f.read().strip()
+
+    try:
+        last_time = datetime.fromisoformat(last_time_str)
+        return new_data_time > last_time
+    except Exception:
+        return True
+
+def update_data_timestamp():
+    """Save latest data modification time after training."""
+    if os.path.exists(DATA_PATH):
+        ts = datetime.fromtimestamp(os.path.getmtime(DATA_PATH)).isoformat()
+        with open(TIMESTAMP_FILE, "w") as f:
+            f.write(ts)
 
 # -------------------- Utility Functions -------------------- #
 def load_processed_data():
@@ -68,33 +102,29 @@ def load_processed_data():
 
     return X_train, X_test, y_train, y_test
 
-def build_ann_from_config(cfg, input_dim=None, output_dim=None):
-    model = Sequential()
-    layers = cfg['layers']
+#def build_ann_from_config(cfg, input_dim=None, output_dim=None):
+ #   model = Sequential()
+  #  layers = cfg['layers']
 
-    # Input layer
-    model.add(Dense(layers[0]['units'], activation=layers[0]['activation'], input_dim=input_dim))
-    if 'dropout' in layers[0] and layers[0]['dropout'] > 0:
-        model.add(Dropout(layers[0]['dropout']))
+   # model.add(Dense(layers[0]['units'], activation=layers[0]['activation'], input_dim=input_dim))
+    #if 'dropout' in layers[0] and layers[0]['dropout'] > 0:
+     #   model.add(Dropout(layers[0]['dropout']))
 
-    # Hidden layers
-    for layer in layers[1:]:
-        model.add(Dense(layer['units'], activation=layer['activation']))
-        if 'dropout' in layer and layer['dropout'] > 0:
-            model.add(Dropout(layer['dropout']))
+    #for layer in layers[1:]:
+     #   model.add(Dense(layer['units'], activation=layer['activation']))
+      #  if 'dropout' in layer and layer['dropout'] > 0:
+       #     model.add(Dropout(layer['dropout']))
 
-    # Output layer
-    model.add(Dense(output_dim, activation=cfg['output_activation']))
+  #  model.add(Dense(output_dim, activation=cfg['output_activation']))
 
-    # Optimizer
-    opt_cfg = cfg['optimizer']
-    if opt_cfg['type'].lower() == 'adam':
-        optimizer = Adam(learning_rate=opt_cfg['learning_rate'])
-    else:
-        optimizer = opt_cfg['type']
+   # opt_cfg = cfg['optimizer']
+    #if opt_cfg['type'].lower() == 'adam':
+     #   optimizer = Adam(learning_rate=opt_cfg['learning_rate'])
+    #else:
+     #   optimizer = opt_cfg['type']
 
-    model.compile(optimizer=optimizer, loss=cfg['loss'], metrics=cfg['metrics'])
-    return model
+    #model.compile(optimizer=optimizer, loss=cfg['loss'], metrics=cfg['metrics'])
+    #return model
 
 def eval_and_log(model, X_test, y_test):
     y_pred = model.predict(X_test)
@@ -121,7 +151,16 @@ def get_next_model_version(model_dir, base_name="best_model"):
 
 # -------------------- Main -------------------- #
 def main():
-    logger.info("Starting training pipeline")
+    logger.info("🚀 Starting training pipeline")
+
+    # 🆕 Retraining trigger check
+    if not data_changed():
+        logger.info("✅ No new data detected — Skipping retraining.")
+        print("✅ No new data detected — Skipping retraining.")
+        return
+    else:
+        print("📊 New data detected — Retraining started...")
+
     X_train, X_test, y_train, y_test = load_processed_data()
 
     # -------------------- Loading preprocessor -------------------- #
@@ -134,8 +173,8 @@ def main():
             X_test = pd.DataFrame(X_test, columns=preprocessor.feature_names_in_)
 
     # -------------------- Candidate Models -------------------- #
-    input_dim = X_train.shape[1]
-    output_dim = len(np.unique(y_train))
+    #input_dim = X_train.shape[1]
+    #output_dim = len(np.unique(y_train))
 
     candidates = {
         "RandomForest": RandomForestClassifier(
@@ -146,17 +185,16 @@ def main():
             **config['models']['XGBoost'],
             verbose=2,
             scale_pos_weight=np.bincount(y_train)[0] / np.bincount(y_train)[1]
-        ),
-        "ANN": KerasClassifier(
-            model=build_ann_from_config,
-            model__cfg=config['models']['ANN'],
-            model__input_dim=input_dim,
-            model__output_dim=output_dim,
-            verbose=2
-        )
+        )#,
+        #"ANN": KerasClassifier(
+         #   model=build_ann_from_config,
+          #  model__cfg=config['models']['ANN'],
+           # model__input_dim=input_dim,
+            #model__output_dim=output_dim,
+            #verbose=2
+        #)
     }
 
-    # -------------------- Cross-Validation and Training -------------------- #
     cv = StratifiedKFold(n_splits=2, shuffle=True, random_state=config['training']['random_state'])
     best_model, best_score, best_name = None, -1, None
     all_results = {}
@@ -166,7 +204,6 @@ def main():
         mlflow.start_run()
         mlflow.set_tag("stage", "training")
 
-    # -------------------- Training Loop -------------------- #
     for name, model in candidates.items():
         logger.info(f"Training model: {name}")
         grid = GridSearchCV(model, {}, cv=cv, scoring='accuracy', n_jobs=1, verbose=2, error_score='raise')
@@ -182,7 +219,7 @@ def main():
         all_results[name] = {
             "cv_score": float(score),
             "test_metrics": test_metrics,
-            "best_params": {}  # fixed hyperparameters from config
+            "best_params": {}
         }
 
         if test_metrics['accuracy'] > best_score:
@@ -209,6 +246,8 @@ def main():
 
         with open(METRICS_JSON, "w") as f:
             json.dump(all_results, f, indent=4)
+
+        update_data_timestamp()  # ✅ update timestamp only when retraining completes
 
         if MLFLOW_AVAILABLE:
             mlflow.log_artifact(versioned_model_path)
