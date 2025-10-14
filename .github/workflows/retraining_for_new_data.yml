@@ -5,7 +5,7 @@ on:
     branches:
       - dev
     paths:
-      - 'data/new_data/student_cleaned_data.csv'
+      - 'data/new_data/new_student_data.csv'
 
 jobs:
   retrain:
