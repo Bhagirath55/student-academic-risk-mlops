@@ -39,13 +39,13 @@ jobs:
           git config --global user.email "21fycs.a20.bhagirath@gmail.com"
 
           # Remove old dataset from Git (keep locally)
-          git ls-files data/preprocessed_data/student_cleaned_dataset.csv | xargs git rm -f || echo "No old base dataset to remove"
+          git ls-files data/preprocessed_data/cleaned_student_dataset.csv | xargs git rm -f || echo "No old base dataset to remove"
 
           # Remove old best model
           git rm -f artifacts/models/best_model.pkl || echo "No old best model to remove"
 
           # Add new versioned dataset(s)
-          git add data/preprocessed_data/student_cleaned_data.csv
+          git add data/preprocessed_data/student_cleaned_data_v*.csv
 
           # Add new best model
           git add artifacts/models/best_model_v*.pkl
