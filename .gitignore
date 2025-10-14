@@ -210,7 +210,7 @@ __marimo__/
 .dvc/cache/
 
 # data, models and mlflows 
-data/
+data/raw/
 artifacts/*.log
 artifacts/processed/
 mlruns/

@@ -92,7 +92,7 @@ jsonschema-path
 jsonschema-specifications
 kiwisolver
 kombu
-keras
+#keras
 lazy-object-proxy
 Mako
 markdown-it-py
@@ -181,7 +181,7 @@ sse-starlette
 starlette
 streamlit
 tabulate
-tensorflow==2.20.0
+#tensorflow==2.20.0
 tensorboard
 threadpoolctl
 tomli
