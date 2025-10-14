@@ -212,7 +212,5 @@ __marimo__/
 # data, models and mlflows 
 data/raw/
 artifacts/*.log
-artifacts/processed/
 mlruns/
-artifacts/training_metrics.json
-artifacts/models/best_model.pkl
+
